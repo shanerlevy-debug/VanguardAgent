@@ -1,0 +1,125 @@
+# 00 — Overview
+
+> **Audience:** the person standing up VanguardCMA for their company.
+> Read this once, top to bottom, before you touch a config file. The
+> rest of the docs assume you've internalized this page.
+
+## What VanguardCMA is
+
+A scheduled agent that does competitive intelligence for your company,
+end-to-end:
+
+1. **Scans** configured sources (news, blogs, press releases, SEC filings,
+   GitHub, YouTube, Reddit, public job boards) for mentions of your tracked
+   competitors.
+2. **Scores** each finding into one of 12 categories at one of three
+   importance levels (High / Medium / Low).
+3. **Posts** High and Medium findings individually to your Slack channel,
+   batches Lows into a single roundup, and always closes with a run-summary
+   message — even when there's nothing new — so the channel never goes silent.
+4. **Remembers** every finding it has seen so it never posts the same item
+   twice across runs.
+
+It runs on a daily (or whatever cadence you choose) cron via a Claude Code
+**routine**, against the Anthropic Managed Agents (CMA) platform.
+
+## What's different about this deployment
+
+VanguardCMA runs **entirely on Anthropic infrastructure**. There is:
+
+- **No AWS account** to set up.
+- **No database** to host. State lives in an Anthropic Memory store.
+- **No Docker images** to build. The agent runs in a managed CMA container.
+- **No MCP server** to deploy. The agent posts to Slack via the standard
+  Slack Web API using `bash` + `curl` — taught how by a custom skill.
+- **No self-hosted scheduler.** A Claude Code routine fires the agent on a
+  cron from Anthropic's side.
+
+The only external surface is **Slack** (where output lands) and the sources
+the agent scans (news.google.com, sec.gov, etc.).
+
+## Architecture at a glance
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                            Anthropic platform                            │
+│                                                                          │
+│   ┌────────────────┐       ┌──────────────────┐    ┌────────────────┐   │
+│   │  Claude Code   │  cron │   CMA agent      │    │  Memory store  │   │
+│   │  routine       ├──────▶│  ─ system prompt │◀──▶│  (find dedupe) │   │
+│   │  (the trigger) │       │  ─ 8 skills      │    └────────────────┘   │
+│   └────────────────┘       │  ─ tools: bash,  │                         │
+│                            │    web_search,   │    ┌────────────────┐   │
+│                            │    web_fetch,    │    │  Files API     │   │
+│                            │    memory_*, etc │    │  slack-token   │   │
+│                            └────────┬─────────┘    │  (mounted in   │   │
+│                                     │              │   container)   │   │
+│                                     │              └────────────────┘   │
+│                                     ▼                                    │
+└─────────────────────────────────────┼────────────────────────────────────┘
+                                      │ HTTPS (curl)
+                                      ▼
+                           ┌──────────────────────┐
+                           │  slack.com Web API   │
+                           │  chat.postMessage    │
+                           └──────────────────────┘
+```
+
+## What you'll do, in order
+
+| Step | What | Time |
+|---|---|---|
+| 1 | [Prerequisites](01-prerequisites.md) — Anthropic API key, Python 3.12+, Slack workspace admin | 15 min |
+| 2 | [Create the Slack bot](02-create-slack-bot.md) — make the Slack app, install it, copy the token | 15 min |
+| 3 | [Configure vanguard.yaml](03-configure-vanguard-yaml.md) — competitors, sources, channel | 30 min |
+| 4 | [Fill company context](04-fill-company-context.md) — author the `understanding-{company}` skill | 60 min |
+| 5 | [Deploy](05-deploy.md) — run `python scripts/deploy.py` | 5 min |
+| 6 | [First run](06-first-run.md) — manually trigger; verify Slack output | 10 min |
+| 7 | [Schedule](07-schedule-via-claude-code.md) — set up the Claude Code routine | 15 min |
+
+> 💡 **Shortcut:** Steps 3 mostly (and the boilerplate of step 4) can be
+> auto-generated by the interactive wizard:
+>
+> ```bash
+> ./onboard.sh        # macOS/Linux
+> .\onboard.ps1       # Windows
+> ```
+>
+> The wizard does a pre-flight check, asks you the minimum questions, and
+> writes `vanguard.yaml` + `secrets.env` + a stubbed
+> `understanding-{slug}` skill. You still need to do step 2 first (so you
+> have the Slack token + channel ID ready) and step 4 (filling in the
+> context skill — the wizard creates the file but the *content* is on you).
+
+After step 7 you're done — findings appear in Slack on the cadence you
+chose. The remaining docs cover ongoing customization, troubleshooting,
+and clean teardown.
+
+## Cost
+
+Per-run cost depends on competitor count and model. Rough orders of
+magnitude (claude-opus-4-7, ~5 competitors, all sources):
+
+- A no-news day (memory hits, no scoring): ~$0.25
+- A typical day (3–5 new findings): ~$1.00
+- A heavy news day (10+ findings, deep fetches): ~$3.00
+
+Switch to `claude-sonnet-4-6` in `vanguard.yaml` to cut these by ~5×. The
+trade is slightly less nuanced scoring; for most deployers it's invisible
+in practice.
+
+## When to read what
+
+- **First time setting this up?** Start with `01-prerequisites.md` and
+  go in order through `07-schedule-via-claude-code.md`.
+- **Adding a new competitor or source after the initial deploy?**
+  `08-customization.md`.
+- **Something broken?** `09-troubleshooting.md`.
+- **Decommissioning?** `10-teardown.md`.
+
+## Project conventions
+
+- All commands assume you're in the `VanguardCMA/` directory unless noted.
+- Bash and PowerShell are both fine. Where they differ, both are shown.
+- "API key" without qualifier means `ANTHROPIC_API_KEY`.
+- "Bot token" without qualifier means `SLACK_BOT_TOKEN` (`xoxb-…`).

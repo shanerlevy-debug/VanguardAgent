@@ -1,0 +1,60 @@
+# Vanguard — Slack App Manifest
+#
+# This file defines the Slack app that Vanguard uses to post competitive
+# intelligence findings. To install:
+#
+#   1. Go to https://api.slack.com/apps
+#   2. Click "Create New App" → "From a manifest"
+#   3. Pick the workspace (your test workspace for POC; client's workspace for prod)
+#   4. Paste the contents of this file (YAML tab)
+#   5. Review and click "Create"
+#   6. On the app's "Install App" page, click "Install to Workspace" and authorize
+#   7. Copy the "Bot User OAuth Token" (starts with xoxb-)
+#   8. Store it in AWS Secrets Manager under the key SLACK_BOT_TOKEN
+#
+# The bot does not listen for events, slash commands, or mentions — it is
+# outbound-only. No Socket Mode, no Event Subscriptions, no Interactivity.
+# This minimizes the attack surface and the OAuth scope footprint.
+
+display_information:
+  name: Vanguard
+  description: Competitive intelligence agent — posts daily findings on tracked competitors.
+  background_color: "#1f2937"
+  long_description: >
+    Vanguard is an automated competitive intelligence agent. It runs daily,
+    scans configured sources for news on tracked competitors, classifies and
+    scores findings, and posts each new finding as an individual alert.
+    Vanguard is outbound-only and does not respond to messages, mentions,
+    or commands.
+
+features:
+  bot_user:
+    display_name: Vanguard
+    always_online: true
+
+oauth_config:
+  scopes:
+    bot:
+      # Required: post messages as the bot
+      - chat:write
+      # Required: post to public channels without requiring the bot to be
+      # invited to each one. Lets a single install serve multiple channels
+      # configured in config.yaml.
+      - chat:write.public
+      # Optional but useful: lets the bot post with a custom username/icon
+      # per message, so different alert types (e.g. high-priority vs roundup)
+      # can be visually distinguished. Remove if unwanted.
+      - chat:write.customize
+
+settings:
+  # No event subscriptions — Vanguard does not listen to anything in Slack.
+  event_subscriptions: null
+  # No interactivity — no buttons, modals, or shortcuts in v1.
+  interactivity:
+    is_enabled: false
+  # Outbound-only, so no Socket Mode required.
+  socket_mode_enabled: false
+  # Single-workspace install for POC and single-tenant production.
+  org_deploy_enabled: false
+  # Token rotation off for simplicity in POC; revisit for production hardening.
+  token_rotation_enabled: false

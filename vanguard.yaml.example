@@ -1,0 +1,165 @@
+# =============================================================================
+# VanguardCMA — agent manifest
+# =============================================================================
+# This single file drives the entire deployment. The deploy script reads it,
+# templates the system prompt with these values, and creates every Anthropic
+# resource (memory store, environment, skills, vault, agent).
+#
+# Copy this file to `agent.yaml`, edit, then run `python scripts/deploy.py`.
+#
+# Field reference: docs/03-configure-agent-yaml.md
+# =============================================================================
+
+# ---------- Company identity --------------------------------------------------
+company:
+  # Human-readable company name. Appears in the system prompt and Slack posts.
+  name: "Acme Wines"
+
+  # Short slug. Lowercase, hyphens only. Used as a prefix on every Anthropic
+  # resource so multiple deployments don't collide.
+  slug: "acme-wines"
+
+  # Name of the company-context skill under skills/custom/.
+  # MUST exactly match the directory name AND the `name:` in its SKILL.md.
+  # Convention: `understanding-{slug}`.
+  context_skill_name: "understanding-acme-wines"
+
+# ---------- The CMA agent itself ---------------------------------------------
+agent:
+  # Display name for the Anthropic agent resource.
+  name: "Vanguard — Acme Wines"
+
+  # Model. Claude 4.5+ required by CMA. Recommended: claude-opus-4-7 for
+  # quality, claude-sonnet-4-6 to cut cost ~5x with a small quality loss.
+  model: "claude-opus-4-7"
+
+  description: "Competitive intelligence agent for Acme Wines."
+
+# ---------- Slack output ------------------------------------------------------
+slack:
+  # The default channel every finding and run-summary posts to.
+  # Must be the channel ID (`C09…`), not the name. See docs/02-create-slack-bot.md.
+  default_channel: "C0123456789"
+
+  # Optional: route specific categories to other channels.
+  # category name (must match one of the 12 categories) → channel id.
+  channel_overrides: {}
+  #  "Funding/M&A": "C09FUNDINGAB"
+  #  "Security/Incidents": "C09SECURITY"
+
+  # How to handle Low-importance findings:
+  #   roundup    — batch into one "low priority roundup" message at end
+  #   individual — post each Low finding on its own (noisy)
+  #   drop       — record but never post Low items
+  low_priority_strategy: "roundup"
+
+# ---------- Competitors -------------------------------------------------------
+competitors:
+  - name: "Kendall-Jackson"               # canonical name; used everywhere
+    aliases: ["KJ", "Kendall Jackson"]    # alternate spellings the agent
+                                          # accepts as "this is them"
+    sources: ["news", "blog", "press_release"]
+    # priority_multiplier: 1.0            # optional; >1 boosts importance
+
+  - name: "Robert Mondavi"
+    aliases: ["Mondavi"]
+    sources: ["news", "press_release"]
+
+# ---------- Sources -----------------------------------------------------------
+# Toggle each source type globally. A competitor only uses a source if the
+# source is enabled here AND listed in that competitor's `sources:`.
+sources:
+  news:
+    enabled: true            # Google News search
+
+  blog:
+    enabled: true            # RSS feeds discovered from competitor sites
+    feeds: []                # optional: extra RSS URLs to always poll
+
+  press_release:
+    enabled: true            # PR Newswire, Business Wire, company newsrooms
+
+  sec:
+    enabled: false           # SEC EDGAR filings — set CIK per competitor below
+    competitor_ciks: {}      # "Kendall-Jackson": "0001234567"
+
+  github:
+    enabled: false           # GitHub releases + new repos
+    competitor_orgs: {}      # "OpenAI": "openai"
+
+  youtube:
+    enabled: false
+    competitor_channels: {}  # "OpenAI": "UCXZCJLdBC09xxGZ6gcdrc6A"
+
+  reddit:
+    enabled: false
+    subreddits: []           # ["wine", "winemaking"]
+
+  job_boards:
+    enabled: false           # public ATS listings — high noise
+
+# ---------- Scoring tuning ----------------------------------------------------
+scoring:
+  # Headline keywords that auto-score a finding High. Case-insensitive,
+  # word-boundary match against title + summary.
+  high_keywords:
+    - "acquires"
+    - "acquisition"
+    - "layoffs"
+    - "raises"
+    - "series"
+    - "breach"
+    - "ceo"
+
+  # Findings older than this many days can never score above Low.
+  recency_cap_days: 7
+
+  # Per-source baseline importance. The default; overrides may apply.
+  source_baseline:
+    news: "medium"
+    blog: "medium"
+    press_release: "medium"
+    sec: "high"
+    github: "low"
+    youtube: "low"
+    reddit: "low"
+    job_boards: "low"
+
+# ---------- Memory store (CMA persistence) -----------------------------------
+memory:
+  # Anthropic memory store name. The deploy script creates it once.
+  store_name: "vanguard-acme-wines"
+
+  description: "Vanguard competitive-intel state for Acme Wines. One file per finding, keyed by competitor and content hash. Read every run to dedupe; written every time a new finding is recorded."
+
+# ---------- CMA environment ---------------------------------------------------
+environment:
+  name: "vanguard-acme-wines-prod"
+
+  # `unrestricted` is simplest. `limited` is safer — only allows the listed
+  # hostnames, plus Slack and the package managers.
+  networking: "limited"
+
+  # Hosts the agent is allowed to fetch from (when networking == limited).
+  # Strip scheme; bare hostnames only. The deploy script also auto-adds
+  # slack.com and the standard package mirrors.
+  allowed_hosts:
+    - "news.google.com"
+    - "www.google.com"
+    - "feeds.feedburner.com"
+    - "www.businesswire.com"
+    - "www.prnewswire.com"
+    - "data.sec.gov"
+    - "api.github.com"
+    - "www.youtube.com"
+    - "www.reddit.com"
+    # Add per-competitor newsroom hosts here, e.g.:
+    # - "www.kj.com"
+    # - "www.robertmondavi.com"
+
+# ---------- Anthropic API beta headers ---------------------------------------
+# Don't change unless Anthropic publishes new beta versions.
+anthropic:
+  beta_headers:
+    - "managed-agents-2026-04-01"
+    - "managed-agents-2026-04-01-research-preview"  # required for memory

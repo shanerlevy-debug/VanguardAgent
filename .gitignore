@@ -1,0 +1,32 @@
+# Local secrets — never commit
+secrets.env
+
+# Orchestration config (your competitors / channel IDs / etc.)
+vanguard.yaml
+
+# Generated CMA-native agent manifest (regenerated on every deploy)
+agent.yaml
+
+# Deploy state cache (resource IDs from last deploy)
+.deploy-state.json
+
+# Per-deployment company-context skills (each deployer creates their own
+# understanding-{slug} from the TEMPLATE; only the TEMPLATE is committed).
+skills/custom/understanding-*
+!skills/custom/understanding-TEMPLATE/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Image / asset stragglers (screenshots, logos) — not part of the codebase
+*.png
+*.jpg
+*.jpeg
+*.webp
